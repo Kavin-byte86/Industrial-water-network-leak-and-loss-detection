@@ -1,16 +1,32 @@
 /**
  * API client — single fetch wrapper, base URL from env.
+ *
+ * Deployment topologies:
+ *   1. VITE_API_BASE_URL set  → call that backend directly (CORS allows all).
+ *      Use this for split-origin deploys (e.g. Vercel frontend + Render backend).
+ *   2. Dev, no env var        → '/api', proxied by the Vite dev server.
+ *   3. Production, no env var → '' (same origin): FastAPI serves this bundle
+ *      and the API from one port.  If that is not the intended topology, set
+ *      VITE_API_BASE_URL in Vercel Environment Variables to the Render URL.
  */
 
-// Three cases, in priority order:
-//   1. VITE_BACKEND_URL set  → call that backend directly (its CORS allows all).
-//   2. dev, no env var       → '/api', which the Vite dev server proxies.
-//   3. production build      → '' (same origin): FastAPI serves this bundle
-//                              itself, so '/state/current' hits the API directly.
-// .env.production blanks VITE_BACKEND_URL so a dev .env cannot bake a
-// localhost URL into the production bundle.
-const BASE_URL =
-  import.meta.env.VITE_BACKEND_URL || (import.meta.env.DEV ? '/api' : '');
+function resolveBaseUrl() {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envUrl) return envUrl.replace(/\/+$/, '');    // trim trailing slashes
+
+  if (import.meta.env.DEV) return '/api';           // Vite proxy
+
+  // Production same-origin: works when FastAPI serves the bundle.
+  // Log a warning so a misconfigured split-origin deploy is obvious.
+  console.warn(
+    '[api/client] VITE_API_BASE_URL is not set. API calls will go to the ' +
+    'same origin. If the backend lives on a different host (e.g. Render), ' +
+    'set VITE_API_BASE_URL in your Vercel Environment Variables.'
+  );
+  return '';
+}
+
+const BASE_URL = resolveBaseUrl();
 
 async function request(path, options = {}) {
   const url = `${BASE_URL}${path}`;

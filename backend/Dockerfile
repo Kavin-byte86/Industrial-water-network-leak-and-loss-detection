@@ -23,4 +23,5 @@ EXPOSE 8000
 
 # There is no app/__main__.py, so `python -m app` cannot start the service.
 # Run the ASGI app through uvicorn instead.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Render injects the listening port via $PORT; fall back to 8000 for local use.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
