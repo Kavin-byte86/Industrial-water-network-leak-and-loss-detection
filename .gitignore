@@ -18,3 +18,26 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# --- Datasets and Large Files ---
+# Ignore synthetic datasets
+synthetic_textile_water_dataset/
+*.csv
+*.pkl
+
+# Ignore external benchmark data
+external_validation/LeakDB/
+external_validation/results/
+external_validation/expected_flow_experiment/
+
+# Ignore Models
+classifier/models/*.pkl
+external_validation/models/
+*.h5
+*.joblib
+
+# Ignore logs and outputs
+*.log
+*.txt
+!requirements.txt
+!README.txt

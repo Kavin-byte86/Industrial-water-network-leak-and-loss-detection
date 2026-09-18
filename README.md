@@ -1,1 +1,188 @@
-# Industrial Water Network Leak and Loss Detection
+# Industrial Water Network Leak & Loss Detection
+## Realistic 1-Year Synthetic Dataset Generator for AI/ML Leak Detection
+
+This repository contains a physically correlated, production-aware synthetic data generation engine simulating an industrial water distribution network for a representative textile wet-processing manufacturing plant.
+
+---
+
+## 1. Project Objective & Core Philosophy
+
+The primary purpose of this dataset is to train a multivariate machine learning model capable of:
+1. **Detecting** whether a water leak is occurring in the industrial water network.
+2. **Quantifying** the leak rate (L/min).
+3. **Localizing** the probable leak zone (`ZONE_J1` through `ZONE_J16`).
+
+### ⚠️ Critical Requirement: High Flow $\neq$ Leak
+In an industrial textile wet-processing facility, water demand is strongly governed by the production schedules of eight heavy-duty processing machines. 
+- At **100% aggregate production**: Expected main incoming water flow $\approx 1000\text{ L/min}$.
+- At **200% aggregate production**: Expected main incoming water flow $\approx 2000\text{ L/min}$.
+
+An increase from 1000 to approximately 2000 L/min due to elevated production **MUST NOT** be labeled as a leak. 
+A leak is flagged (`leak = 1`) **only** when observed water flow significantly exceeds the expected consumption calculated from current machine production, machine states, and tap usage, or when localized mass-balance and pressure anomalies occur across junction headers.
+
+---
+
+## 2. Network Topology & Hydraulic Architecture
+
+The facility water network follows a tree-structured hydraulic graph branching from a single main inlet ($J_1$) into four primary distribution manifolds and terminal units.
+
+```
+                                [ J1: Main Water Inlet ]
+                                           │
+       ┌───────────────────┬───────────────┴───────────────┬───────────────────┐
+       ▼                   ▼                               ▼                   ▼
+ [ J2: Branch A ]    [ J3: Branch B ]                [ J4: Branch C ]    [ J7: Branch D ]
+    ├── J5  (M1)        ├── J8  (M3)                    ├── J11 (M6)        ├── J13 (M8)
+    └── J6  (M2)        ├── J9  (M4)                    └── J12 (M7)        ├── J14 (Tap 1)
+                        └── J10 (M5)                                        ├── J15 (Tap 2)
+                                                                            └── J16 (Tap 3)
+```
+
+### Physical Conservation of Mass
+At all times, the network adheres to hydraulic conservation laws:
+$$J_1 \approx J_2 + J_3 + J_4 + J_7$$
+$$J_2 \approx J_5 + J_6$$
+$$J_3 \approx J_8 + J_9 + J_{10}$$
+$$J_4 \approx J_{11} + J_{12}$$
+$$J_7 \approx J_{13} + J_{14} + J_{15} + J_{16}$$
+
+During normal operations, mass-balance residuals remain near zero (subject only to minor measurement noise). When a leak occurs downstream of any junction, the appropriate upstream sensors reflect the added flow, creating measurable localized mass-balance deficits.
+
+---
+
+## 3. Sensor Definitions (16 Flow Measurement Points)
+
+| Sensor ID | Location | Type | Parent Node | Downstream Nodes | Measurement Unit |
+|---|---|---|---|---|---|
+| **J1** | Main Inlet Header | Ultrasonic Flow | Source | J2, J3, J4, J7 | L/min |
+| **J2** | Branch A Manifold | Electromagnetic Flow | J1 | J5, J6 | L/min |
+| **J3** | Branch B Manifold | Electromagnetic Flow | J1 | J8, J9, J10 | L/min |
+| **J4** | Branch C Manifold | Electromagnetic Flow | J1 | J11, J12 | L/min |
+| **J5** | Machine M1 Feed | Electromagnetic Flow | J2 | M1 | L/min |
+| **J6** | Machine M2 Feed | Electromagnetic Flow | J2 | M2 | L/min |
+| **J7** | Branch D Utility | Electromagnetic Flow | J1 | J13, J14, J15, J16 | L/min |
+| **J8** | Machine M3 Feed | Electromagnetic Flow | J3 | M3 | L/min |
+| **J9** | Machine M4 Feed | Electromagnetic Flow | J3 | M4 | L/min |
+| **J10** | Machine M5 Feed | Electromagnetic Flow | J3 | M5 | L/min |
+| **J11** | Machine M6 Feed | Electromagnetic Flow | J4 | M6 | L/min |
+| **J12** | Machine M7 Feed | Electromagnetic Flow | J4 | M7 | L/min |
+| **J13** | Machine M8 Feed | Electromagnetic Flow | J7 | M8 | L/min |
+| **J14** | Utility Washdown Tap 1 | Turbine Flow | J7 | Tap 1 | L/min |
+| **J15** | Equipment Cleaning Tap 2 | Turbine Flow | J7 | Tap 2 | L/min |
+| **J16** | Sampling & Dilution Tap 3 | Turbine Flow | J7 | Tap 3 | L/min |
+
+### Pressure Sensors
+Pressure measurements are captured at the primary headers: `pressure_J1`, `pressure_J2`, `pressure_J3`, `pressure_J4`, and `pressure_J7`. Pressures typically range between **3.0 and 6.0 bar**, dropping with increased flow velocity (Darcy-Weisbach friction loss) and undergoing localized pressure drops during pipe rupture or leak events.
+
+---
+
+## 4. Textile Equipment & Consumption Models
+
+### 8 Wet-Processing Machines
+Each machine possesses independent production rates ($0\%$ to $200\%$) and distinct operational states (`OFF`, `STARTING`, `RUNNING`, `STOPPING`, `MAINTENANCE`).
+
+$$\text{flow}_i = \text{base\_flow}_i + \alpha_i \cdot \text{prod}_i + \beta_i \cdot (\text{prod}_i)^{\gamma_i} + \epsilon$$
+
+1. **M1 (Scouring Machine)**: Alkaline wetting and scour. High chemical wash flow ($\alpha=0.95$, nominal: 130 L/min).
+2. **M2 (Bleaching Machine)**: Continuous hydrogen peroxide bleach line ($\alpha=1.05$, nominal: 145 L/min).
+3. **M3 (Dyeing Machine 1)**: High-temperature jet dyeing autoclave ($\alpha=1.15$, nominal: 160 L/min).
+4. **M4 (Dyeing Machine 2)**: Atmospheric overflow dyeing vessel ($\alpha=1.12$, nominal: 155 L/min).
+5. **M5 (Washing Machine)**: Multi-stage counter-current wash range ($\alpha=0.90$, nominal: 125 L/min).
+6. **M6 (Finishing Machine)**: Chemical finish applicator and stenter padder ($\alpha=0.70$, nominal: 95 L/min).
+7. **M7 (Washing/Rinsing Machine)**: Post-dye neutralizer and soaping range ($\alpha=0.85$, nominal: 115 L/min).
+8. **M8 (Utility/Process Machine)**: Steam boiler makeup and heat exchange cooling ($\alpha=0.45$, nominal: 60 L/min).
+
+### 3 Utility Taps
+Taps operates independently of machine production schedules, representing cleaning routines, shift handovers (06:00, 14:00, 22:00), equipment washdowns, and quality control sampling.
+
+---
+
+## 5. Leak Generation & Physics Propagation
+
+- **Frequency**: 30–60 events per year (default: ~46 events, covering 5–12% of the year).
+- **Leak Types**:
+  1. *Small gradual leak*: Ramping up slowly over hours (10–50 L/min).
+  2. *Small sudden leak*: Abrupt step change (10–50 L/min).
+  3. *Medium leak*: Continuous pipe defect (50–150 L/min).
+  4. *Large leak*: Major burst / rupture (150–480 L/min) accompanied by pronounced pressure drop.
+  5. *Progressive leak*: Accelerating pipe degradation.
+  6. *Intermittent leak*: Pressure-dependent or cyclical leakage.
+- **Topological Propagation**: Leak water added to upstream parents without inflating downstream machines.
+  - Leak at $J_3$ header $\implies J_1 \uparrow$, $J_3 \uparrow$; downstream $J_8, J_9, J_{10}$ remain at machine demand $\implies \text{balance}_{J3} = \text{leak\_rate} > 0$.
+
+---
+
+## 6. Generated Directory & File Structure
+
+```
+synthetic_textile_water_dataset/
+├── sensors/
+│   ├── sensor_J01.csv ... sensor_J16.csv   # Synchronized telemetry per sensor
+├── machines/
+│   ├── machine_M01.csv ... machine_M08.csv # Production rate, status, water demand
+├── taps/
+│   ├── tap_T01.csv ... tap_T03.csv         # Tap state and flow
+├── network_master.csv                      # Unified multi-sensor master dataset
+├── ml_training_dataset.csv                 # Feature-engineered ML training dataset
+├── leak_events.csv                         # Ground-truth leak event catalog
+├── sensor_metadata.csv                     # Topological metadata
+├── network_topology.json                   # Network graph representation
+├── README.md                               # Dataset summary document
+└── plots/                                  # 7 automated validation plots
+    ├── main_flow_vs_production.png
+    ├── production_vs_expected_flow.png
+    ├── normal_vs_leak_behavior.png
+    ├── pressure_during_leak.png
+    ├── leak_event_across_sensors.png
+    ├── network_flow_balance.png
+    └── machine_production_vs_demand.png
+```
+
+---
+
+## 7. How to Run & Customizing Simulation Parameters
+
+### Quick Start (Local)
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Run simulation generator
+python generator.py
+
+# 3. Run automated validation checks
+python validation.py
+```
+
+### Running with Docker (Cross-Device Support)
+Build and execute the complete pipeline on any device or cloud container:
+```bash
+# Build docker container
+docker build -t textile-water-leak-detection .
+
+# Run dataset generation and validation
+docker run --rm -v $(pwd)/synthetic_textile_water_dataset:/workspace/synthetic_textile_water_dataset textile-water-leak-detection
+```
+
+### Customizing Simulation Parameters (`config.py`)
+Edit `config.py` to change:
+- `START_DATE`, `END_DATE`, `SAMPLING_MINUTES`: Adjust temporal horizon and sampling resolution.
+- `FLOW_NOISE_PERCENT`, `PRESSURE_NOISE_BAR`: Fine-tune sensor measurement noise.
+- `MISSING_DATA_PERCENT`, `OUTLIER_PERCENT`: Tune data corruption and non-leak spikes.
+- `LEAK_CONFIG`: Adjust event count, severity ranges, and duration.
+- `MACHINE_SPECS`: Modify machine names, baseline flows, and production power coefficients.
+
+---
+
+## 8. Verification & Demonstration Cases
+
+The system includes automated demonstrations validating production-aware behavior:
+
+| Case | Condition | Flow Behavior | Label | Rationale |
+|---|---|---|---|---|
+| **Case 1** | Production = 100% | Main Flow $\approx 900-1000\text{ L/min}$ | `leak = 0` | Legitimate production demand |
+| **Case 2** | Production = 200% | Main Flow $\approx 1500-2000\text{ L/min}$ | `leak = 0` | Legitimate doubled production |
+| **Case 3** | Production = 200% | Main Flow significantly exceeds expected | `leak = 1` | Unaccounted water detected above expected |
+| **Case 4** | Constant Production | Localized branch imbalance ($\Delta Q$) | `leak = 1` | Topological mass-balance violation |
+
+All **16 Automated Validation Checks** pass with $0$ errors.
