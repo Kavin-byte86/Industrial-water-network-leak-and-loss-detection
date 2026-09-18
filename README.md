@@ -189,7 +189,90 @@ All **16 Automated Validation Checks** pass with $0$ errors.
 
 ---
 
-## 9. Machine Learning Pipeline
+
+---
+
+## 9. Running the Full Stack (Backend + Frontend)
+
+The live demo is two processes: a FastAPI simulation backend and a React (Vite)
+frontend that polls it.
+
+### Backend — FastAPI simulator
+
+```bash
+cd backend
+python -m venv .venv                     # Python 3.8+ works; Docker image uses 3.11
+.venv/Scripts/python -m pip install -r requirements.txt   # Linux/macOS: .venv/bin/python
+.venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
+```
+
+Serves on `http://127.0.0.1:8000`; interactive API docs at `/docs`. A background
+loop auto-ticks every 2 s (= 5 simulated minutes) as soon as the app starts.
+
+Run the test suite with `.venv/Scripts/python -m pytest tests -q` (17 tests).
+
+### Frontend — React + Vite
+
+```bash
+cd frontend
+npm install
+cp .env.example .env     # optional, see below
+npm run dev
+```
+
+Serves on `http://localhost:5173`.
+
+### How the two connect
+
+There are two working paths, and the frontend picks one automatically:
+
+| `VITE_BACKEND_URL` | Request path | Mechanism |
+|---|---|---|
+| set (e.g. `http://127.0.0.1:8000`) | direct to backend | backend CORS allows all origins |
+| unset | `/api/*` | Vite dev-server proxy in `vite.config.js` (same-origin, no CORS) |
+
+The proxy path is the better default for local development; set the env var when
+the backend runs on another host or port.
+
+Endpoints consumed by the UI ([`frontend/src/api/client.js`](frontend/src/api/client.js)):
+
+| Endpoint | Used by |
+|---|---|
+| `GET /state/current` | `useNetworkState` — polls every 2 s, drives every view |
+| `GET /state/history?limit=N` | `useHistory` — polls every 5 s for the history view |
+| `GET /network/topology` | static graph for rendering |
+| `POST /control/machine`, `POST /control/tap` | Facility Map controls |
+| `POST /simulation/{step,pause,resume,reset}` | Sidebar controls |
+| `GET /datasink/latest`, `GET /datasink/export` | flat ML-schema rows |
+| `GET /predict/current` | classifier output — **see the caveat below** |
+
+### Docker
+
+```bash
+cd backend && docker build -t water-network-backend . && docker run -p 8000:8000 water-network-backend
+```
+
+### Known gap: `/predict/current` is not usable yet
+
+The backend simulator and the trained classifier were built to different
+specifications, so the live prediction path is wrong in a way that *looks* like it
+works. On entirely normal input it returns a high-confidence leak.
+
+1. `/datasink/latest` emits `shift` as `"A"/"B"/"C"`; the classifier was trained on
+   `1/2/3`, so the call currently fails with a conversion error.
+2. Even with that fixed, the flat row supplies only 31 of the 147 Stage-2 features.
+   Stage 1 derives 48 more, leaving ~68 zero-filled — including every rolling
+   statistic and all five mass balances, which are the core leak signal.
+3. The backend's physics (uniform 125 L/min machines, linear pressure model) does
+   not match `classifier/config.py` (per-machine alpha/beta curves, per-branch friction),
+   so Stage 1's expected-flow model is calibrated for a different plant.
+
+Fixing this needs a design decision: either drive the backend from
+`classifier/config.py`'s physics, or buffer ticks and call `predict_batch` over a
+window so the rolling and balance features can actually be computed. Until then the
+UI does not surface predictions.
+
+## 10. Machine Learning Pipeline
 
 The detector is a 4-stage pipeline in [`classifier/`](classifier/):
 
@@ -251,7 +334,7 @@ the LeakDB external benchmark, and an interactive leak-injection simulator.
 
 ---
 
-## 10. External Validation (LeakDB)
+## 11. External Validation (LeakDB)
 
 The synthetic benchmark partly measures self-consistency, so the methodology is
 also validated against the public **LeakDB** municipal benchmark (Hanoi CMH). The
@@ -272,7 +355,7 @@ the production-aware textile pipeline as a whole.
 
 ---
 
-## 11. Known Limitations
+## 12. Known Limitations
 
 - **Small leaks are undetectable by construction.** At 2% flow noise on a
   ~1000 L/min main, the noise floor is ~20 L/min. Leaks below roughly 30 L/min

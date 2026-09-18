@@ -5,6 +5,8 @@ All defaults match BACKEND_IMPLEMENTATION_PLAN.md §3–§4.
 Override any value via environment variable of the same name (uppercase).
 """
 
+from __future__ import annotations
+
 import os
 from datetime import datetime
 

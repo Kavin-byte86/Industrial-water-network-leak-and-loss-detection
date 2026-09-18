@@ -1,6 +1,11 @@
-"""Pydantic schemas for simulation state responses."""
+"""Pydantic schemas for simulation state responses.
 
-from __future__ import annotations
+Pydantic resolves annotations at runtime, so `from __future__ import annotations`
+does not make PEP 585/604 syntax safe here. These use `typing` constructs so the
+package imports on the same Python 3.8 interpreter that runs the classifier.
+"""
+
+from typing import Dict, List
 
 from pydantic import BaseModel
 
@@ -22,12 +27,12 @@ class TickSnapshot(BaseModel):
     day_of_week: int
     month: int
     shift: str
-    flows: dict[str, float]
-    pressures: dict[str, float]
-    machines: dict[str, MachineState]
-    taps: dict[str, TapState]
+    flows: Dict[str, float]
+    pressures: Dict[str, float]
+    machines: Dict[str, MachineState]
+    taps: Dict[str, TapState]
 
 
 class HistoryResponse(BaseModel):
-    ticks: list[TickSnapshot]
+    ticks: List[TickSnapshot]
     count: int

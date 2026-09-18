@@ -2,7 +2,10 @@
  * API client — single fetch wrapper, base URL from env.
  */
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+// With VITE_BACKEND_URL set (see .env.example) we call the backend directly and
+// rely on its permissive CORS config. Without it we fall back to '/api', which
+// the Vite dev server proxies to the backend — same-origin, so no CORS at all.
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || '/api';
 
 async function request(path, options = {}) {
   const url = `${BASE_URL}${path}`;

@@ -21,4 +21,6 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["python", "-m", "app"]
+# There is no app/__main__.py, so `python -m app` cannot start the service.
+# Run the ASGI app through uvicorn instead.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

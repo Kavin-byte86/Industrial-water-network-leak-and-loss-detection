@@ -11,6 +11,8 @@ Asserts:
 across many random ticks with varying machine/tap states.
 """
 
+from __future__ import annotations
+
 import random
 import sys
 import os

@@ -5,6 +5,8 @@ Setting all machines to 200% RUNNING should scale flows roughly linearly
 compared to 100% (within noise tolerance). No leak fields exist yet.
 """
 
+from __future__ import annotations
+
 import sys
 import os
 

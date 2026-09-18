@@ -59,3 +59,7 @@ external_validation/models/
 !requirements.txt
 !README.txt
 
+
+# Local dev environments / build output
+.venv*/
+frontend/dist/

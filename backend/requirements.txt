@@ -1,1 +1,14 @@
 # Backend dependencies
+#
+# Runs on Python 3.8+ (the same interpreter as the classifier, so
+# /predict/current can load the pickled models in-process). The Dockerfile
+# uses 3.11. Keep new code 3.8-compatible: use `typing.Dict` / `Optional`
+# in pydantic models, since pydantic evaluates annotations at runtime.
+
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.6.0
+
+# Test suite (backend/tests)
+pytest>=8.0.0
+httpx>=0.26.0
