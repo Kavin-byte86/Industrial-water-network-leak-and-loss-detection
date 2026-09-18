@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.control import router as control_router
 from app.api.datasink import router as datasink_router
 from app.api.network import router as network_router
+from app.api.predict import router as predict_router
 from app.api.simulation import router as simulation_router
 from app.api.state import router as state_router
 from app.dependencies import engine
@@ -30,7 +31,7 @@ async def lifespan(app: FastAPI):
 
 # ── App factory ───────────────────────────────────────────────────────────
 app = FastAPI(
-    title="ABC Textiles Water Network Simulation",
+    title="ABC Industries Water Network Simulation",
     description=(
         "Simulates a 16-junction, 8-machine, 3-tap textile-mill water "
         "network for leak-detection development."
@@ -54,6 +55,7 @@ app.include_router(state_router)
 app.include_router(control_router)
 app.include_router(simulation_router)
 app.include_router(datasink_router)
+app.include_router(predict_router)
 
 
 @app.get("/", tags=["health"])

@@ -177,7 +177,7 @@ def test_datasink_latest_flat_format():
     assert "flow_J1" in data
     assert "pressure_J1" in data
     assert "production_M1" in data
-    assert "machine_state_M1" in data
-    assert "tap_state_T1" in data
+    assert "machine_status_M1" in data
+    assert "tap_status_T1" in data
     assert "hour" in data
     assert "shift" in data

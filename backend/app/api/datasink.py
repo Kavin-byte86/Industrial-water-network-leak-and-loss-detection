@@ -23,8 +23,8 @@ def _flatten_snapshot(snap: dict) -> dict:
         flow_J1 … flow_J16,
         pressure_J1 … pressure_J16,
         production_M1 … production_M8,
-        machine_state_M1 … machine_state_M8,
-        tap_state_T1 … tap_state_T3
+        machine_status_M1 … machine_status_M8,
+        tap_status_T1 … tap_status_T3
     """
     flat: dict = {
         "timestamp": snap["timestamp"],
@@ -45,11 +45,11 @@ def _flatten_snapshot(snap: dict) -> dict:
     # Machine production & state
     for mid, minfo in snap.get("machines", {}).items():
         flat[f"production_{mid}"] = minfo["production_pct"]
-        flat[f"machine_state_{mid}"] = minfo["state"]
+        flat[f"machine_status_{mid}"] = minfo["state"]
 
     # Tap state
     for tid, tinfo in snap.get("taps", {}).items():
-        flat[f"tap_state_{tid}"] = tinfo["state"]
+        flat[f"tap_status_{tid}"] = tinfo["state"]
 
     # Leak fields — not implemented yet (§8), defaulted for forward-compat
     # These will be populated once leak_extension_point.py is implemented.
