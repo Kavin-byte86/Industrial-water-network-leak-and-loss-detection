@@ -1,35 +1,45 @@
 """
-Production model — §3.1 / §3.2 of BACKEND_IMPLEMENTATION_PLAN.md.
+Production model — per-machine water demand.
 
-Computes per-tick flow contributions for every machine and tap based on
-their current state and production rate.
+The flow curves come from `classifier/config.py`, the same file that generated
+the dataset the ML models were trained on. That is deliberate: the backend used
+to carry its own simplified physics (every machine a flat 125 L/min, a linear
+pressure model), which put live telemetry in a different distribution from the
+training data and made the trained models useless against it.
+
+Each machine follows
+
+    flow = base_flow + alpha * prod + beta * prod ** power
+
+with per-machine coefficients, a startup multiplier while STARTING, and a small
+standby draw when OFF.
 """
 
 from __future__ import annotations
 
 import random
 
-from app.core.config import (
-    MACHINE_BASE_FLOWS,
-    MACHINE_TRANSITION_FACTOR,
-    NOISE_SIGMA_FRACTION,
-    TAP_BASE_FLOWS,
-    TAP_VARIATION_HIGH,
-    TAP_VARIATION_LOW,
-)
+from app.core.config import NOISE_SIGMA_FRACTION
+from app.classifier_config import MACHINE_SPECS, TAP_SPECS, FLOW_NOISE_FRACTION
 
 
-def _add_noise(value: float, sigma_frac: float = NOISE_SIGMA_FRACTION) -> float:
-    """Add Gaussian measurement noise proportional to the value."""
+def _add_noise(value: float, sigma_frac: float | None = None) -> float:
+    """Gaussian measurement noise proportional to the reading."""
     if value == 0.0:
         return 0.0
-    sigma = abs(value) * sigma_frac
-    return value + random.gauss(0, sigma)
+    frac = FLOW_NOISE_FRACTION if sigma_frac is None else sigma_frac
+    return value + random.gauss(0, abs(value) * frac)
 
 
-# ---------------------------------------------------------------------------
-# Machine flow
-# ---------------------------------------------------------------------------
+def running_flow(spec: dict, production_pct: float) -> float:
+    """The machine's demand curve at a given production rate."""
+    prod = max(0.0, production_pct)
+    return (
+        spec["base_flow"]
+        + spec["alpha"] * prod
+        + spec["beta"] * (prod ** spec["power"])
+    )
+
 
 def compute_machine_flow(
     machine_id: str,
@@ -39,40 +49,62 @@ def compute_machine_flow(
     """
     Return the flow contribution (L/min) for a single machine this tick.
 
-    States:
-        OFF / MAINTENANCE  → 0
-        RUNNING            → base_flow × (production_pct / 100) + noise
-        STARTING / STOPPING → RUNNING value × transition factor + noise
+    State handling matches `classifier/feature_engineering.py` exactly, so the
+    expected-flow model sees the relationship it was fitted on:
+
+        OFF          -> standby draw
+        MAINTENANCE  -> standby * 4 + 5
+        STOPPING     -> half of base flow
+        STARTING     -> running flow * startup factor (startup draws MORE)
+        RUNNING      -> the demand curve
     """
-    if state in ("OFF", "MAINTENANCE"):
+    spec = MACHINE_SPECS.get(machine_id)
+    if spec is None:
         return 0.0
 
-    base = MACHINE_BASE_FLOWS.get(machine_id, 125.0)
-    running_flow = base * (production_pct / 100.0)
+    if state == "OFF":
+        demand = spec["standby_flow"]
+    elif state == "MAINTENANCE":
+        demand = spec["standby_flow"] * 4.0 + 5.0
+    elif state == "STOPPING":
+        demand = spec["base_flow"] * 0.5
+    elif state == "STARTING":
+        demand = running_flow(spec, production_pct) * spec["startup_factor"]
+    else:  # RUNNING
+        demand = running_flow(spec, production_pct)
 
-    if state in ("STARTING", "STOPPING"):
-        running_flow *= MACHINE_TRANSITION_FACTOR
-
-    return _add_noise(running_flow)
+    demand = max(spec.get("min_flow", 0.0), min(demand, spec.get("max_flow", 1e9)))
+    return _add_noise(demand)
 
 
-# ---------------------------------------------------------------------------
-# Tap flow
-# ---------------------------------------------------------------------------
-
-def compute_tap_flow(
-    tap_id: str,
-    state: str,
-) -> float:
-    """
-    Return the flow contribution (L/min) for a single tap this tick.
-
-    CLOSED → 0
-    OPEN   → base_flow × random_factor(0.6–1.4) + noise
-    """
-    if state == "CLOSED":
+def compute_tap_flow(tap_id: str, state: str) -> float:
+    """Tap draw: nominal when OPEN with its own spread, zero when CLOSED."""
+    spec = TAP_SPECS.get(tap_id)
+    if spec is None or state != "OPEN":
         return 0.0
+    nominal = spec["nominal_flow"]
+    value = random.gauss(nominal, spec["flow_std"])
+    return max(0.0, _add_noise(value))
 
-    base = TAP_BASE_FLOWS.get(tap_id, 20.0)
-    random_factor = random.uniform(TAP_VARIATION_LOW, TAP_VARIATION_HIGH)
-    return _add_noise(base * random_factor)
+
+def expected_machine_flow(machine_id: str, production_pct: float, state: str) -> float:
+    """Noise-free demand — what the machine *should* draw. Used by reconciliation."""
+    spec = MACHINE_SPECS.get(machine_id)
+    if spec is None:
+        return 0.0
+    if state == "OFF":
+        return spec["standby_flow"]
+    if state == "MAINTENANCE":
+        return spec["standby_flow"] * 4.0 + 5.0
+    if state == "STOPPING":
+        return spec["base_flow"] * 0.5
+    if state == "STARTING":
+        return running_flow(spec, production_pct) * spec["startup_factor"]
+    return running_flow(spec, production_pct)
+
+
+def expected_tap_flow(tap_id: str, state: str) -> float:
+    spec = TAP_SPECS.get(tap_id)
+    if spec is None or state != "OPEN":
+        return 0.0
+    return spec["nominal_flow"]

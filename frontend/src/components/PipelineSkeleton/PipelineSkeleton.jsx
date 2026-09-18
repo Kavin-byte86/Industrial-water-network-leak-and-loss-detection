@@ -6,8 +6,6 @@
  * Animated flow dashes proportional to flow rate.
  */
 
-import { useMemo } from 'react';
-
 // ── Layout positions (hand-tuned for the exact topology) ──
 const NODES = {
   J1:  { x: 450, y: 50,  type: 'junction' },
@@ -52,7 +50,8 @@ const EDGES = [
 
 const ENDPOINT_EDGES = Object.entries(ENDPOINTS).map(([id, ep]) => [ep.from, id]);
 
-export function PipelineSkeleton({ state }) {
+export function PipelineSkeleton({ state, leakNodes = [] }) {
+  const leaking = new Set(leakNodes);
   const flows = state?.flows || {};
   const machines = state?.machines || {};
   const taps = state?.taps || {};
@@ -64,7 +63,9 @@ export function PipelineSkeleton({ state }) {
       </div>
       <svg className="pipeline-svg" viewBox="0 0 960 420" preserveAspectRatio="xMidYMid meet">
         {/* Title */}
-        <text x="480" y="30" textAnchor="middle" fontSize="11" fontWeight="600" fill="#4a5568">
+        {/* Anchored top-left: centred at x=480,y=30 it overlapped J1's flow
+            label, which sits directly above the root node at the same height. */}
+        <text x="12" y="18" textAnchor="start" fontSize="11" fontWeight="600" fill="var(--text-secondary)">
           Water Network Topology — J1 Main Inlet
         </text>
 
@@ -103,7 +104,11 @@ export function PipelineSkeleton({ state }) {
           const flow = flows[id] || 0;
           return (
             <g key={id}>
-              <circle cx={node.x} cy={node.y} r={14} className="node-junction" />
+              <circle cx={node.x} cy={node.y} r={14}
+                className={`node-junction ${leaking.has(id) ? 'node-leaking' : ''}`} />
+              {leaking.has(id) && (
+                <circle cx={node.x} cy={node.y} r={22} className="leak-halo" />
+              )}
               <text className="node-label" x={node.x} y={node.y + 3}>{id}</text>
               <text className="flow-label" x={node.x} y={node.y - 20}>
                 {flow > 0 ? flow.toFixed(0) : ''}
@@ -152,11 +157,11 @@ export function PipelineSkeleton({ state }) {
         {/* Legend */}
         <g transform="translate(20, 390)">
           <circle cx={0} cy={0} r={6} className="node-junction" />
-          <text x={12} y={4} fontSize="8" fill="#718096">Junction</text>
+          <text x={12} y={4} fontSize="8" fill="var(--text-muted)">Junction</text>
           <rect x={60} y={-6} width={12} height={12} rx={2} className="node-machine" />
-          <text x={78} y={4} fontSize="8" fill="#718096">Machine</text>
+          <text x={78} y={4} fontSize="8" fill="var(--text-muted)">Machine</text>
           <polygon points="130,-6 124,8 136,8" className="node-tap" />
-          <text x={142} y={4} fontSize="8" fill="#718096">Tap</text>
+          <text x={142} y={4} fontSize="8" fill="var(--text-muted)">Tap</text>
         </g>
       </svg>
     </div>

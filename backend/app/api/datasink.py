@@ -51,11 +51,14 @@ def _flatten_snapshot(snap: dict) -> dict:
     for tid, tinfo in snap.get("taps", {}).items():
         flat[f"tap_status_{tid}"] = tinfo["state"]
 
-    # Leak fields — not implemented yet (§8), defaulted for forward-compat
-    # These will be populated once leak_extension_point.py is implemented.
-    # flat["leak"] = 0
-    # flat["leak_rate"] = 0.0
-    # flat["leak_zone"] = None
+    # Leak labels: ground truth from injection, not the detector's opinion, so
+    # exported rows are usable as supervised training data.
+    injected = snap.get("injected_leaks") or {}
+    flat["leak"] = 1 if injected else 0
+    flat["leak_rate"] = round(sum(injected.values()), 2)
+    flat["leak_zone"] = (
+        f"ZONE_{max(injected, key=injected.get)}" if injected else None
+    )
 
     return flat
 

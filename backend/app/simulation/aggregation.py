@@ -13,7 +13,7 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
-from app.core.config import NOISE_SIGMA_FRACTION
+from app.classifier_config import FLOW_NOISE_FRACTION as NOISE_SIGMA_FRACTION
 from app.network.topology import (
     ALL_JUNCTION_IDS,
     JUNCTION_TO_ENDPOINT,
@@ -34,6 +34,7 @@ def _measurement_noise(value: float) -> float:
 
 def aggregate_flows(
     endpoint_flows: dict[str, float],
+    leak_rates: dict[str, float] | None = None,
 ) -> dict[str, float]:
     """
     Compute flow at every junction by walking the topology bottom-up.
@@ -43,6 +44,11 @@ def aggregate_flows(
     endpoint_flows : dict
         Mapping of endpoint id (M1–M8, T1–T3) → flow (L/min) for this tick,
         as produced by the production model.
+    leak_rates : dict, optional
+        Node id → leak rate (L/min). A leak is added to its own node after that
+        node's children have been summed, so it propagates upward to every
+        ancestor while leaving the children reading normal demand. See
+        app/leak_extension_point.py.
 
     Returns
     -------
@@ -50,6 +56,7 @@ def aggregate_flows(
         Mapping of junction id (J1–J16) → measured flow (L/min) including
         measurement noise.
     """
+    leak_rates = leak_rates or {}
     junction_flows: dict[str, float] = {}
 
     # Pass 1 — leaf junctions: flow equals their endpoint's flow
@@ -58,11 +65,9 @@ def aggregate_flows(
         if not node.children:
             ep_id = JUNCTION_TO_ENDPOINT.get(jid)
             raw = endpoint_flows.get(ep_id, 0.0) if ep_id else 0.0
-            # ── LEAK EXTENSION HOOK (§8) ──────────────────────────────
-            # When leak injection is implemented, subtract the leak rate
-            # from `raw` here BEFORE adding measurement noise.
-            # See app/leak_extension_point.py for the agreed interface.
-            # ──────────────────────────────────────────────────────────
+            # Leak water passes this meter but never reaches the endpoint, so it
+            # is added before noise — the sensor cannot tell it apart from demand.
+            raw += leak_rates.get(jid, 0.0)
             junction_flows[jid] = raw + _measurement_noise(raw)
 
     # Pass 2 — intermediate junctions (processed in reverse topological
@@ -76,8 +81,10 @@ def aggregate_flows(
 
     for jid in depth_order:
         node = NODES[jid]
+        # Children already carry their own leaks, so only this node's leak is
+        # added here; the result propagates on up to the root.
         raw = sum(junction_flows.get(cid, 0.0) for cid in node.children)
-        # ── LEAK EXTENSION HOOK (§8) — same as above ─────────────
+        raw += leak_rates.get(jid, 0.0)
         junction_flows[jid] = raw + _measurement_noise(raw)
 
     return junction_flows

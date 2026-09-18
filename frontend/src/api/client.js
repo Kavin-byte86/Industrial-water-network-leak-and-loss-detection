@@ -2,10 +2,15 @@
  * API client — single fetch wrapper, base URL from env.
  */
 
-// With VITE_BACKEND_URL set (see .env.example) we call the backend directly and
-// rely on its permissive CORS config. Without it we fall back to '/api', which
-// the Vite dev server proxies to the backend — same-origin, so no CORS at all.
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || '/api';
+// Three cases, in priority order:
+//   1. VITE_BACKEND_URL set  → call that backend directly (its CORS allows all).
+//   2. dev, no env var       → '/api', which the Vite dev server proxies.
+//   3. production build      → '' (same origin): FastAPI serves this bundle
+//                              itself, so '/state/current' hits the API directly.
+// .env.production blanks VITE_BACKEND_URL so a dev .env cannot bake a
+// localhost URL into the production bundle.
+const BASE_URL =
+  import.meta.env.VITE_BACKEND_URL || (import.meta.env.DEV ? '/api' : '');
 
 async function request(path, options = {}) {
   const url = `${BASE_URL}${path}`;
@@ -41,6 +46,7 @@ export const api = {
     }),
 
   // Simulation
+  getSimStatus: () => request('/simulation/status'),
   step: () => request('/simulation/step', { method: 'POST' }),
   pause: () => request('/simulation/pause', { method: 'POST' }),
   resume: () => request('/simulation/resume', { method: 'POST' }),
@@ -53,4 +59,29 @@ export const api = {
 
   // Predict
   getPrediction: () => request('/predict/current'),
+
+  // Test bench — leak injection, sensor overrides, endpoint control
+  getTestbenchSnapshot: () => request('/testbench/snapshot'),
+  setLeak: (node_id, rate_lpm) =>
+    request('/testbench/leak', {
+      method: 'POST',
+      body: JSON.stringify({ node_id, rate_lpm }),
+    }),
+  clearLeak: (node_id) =>
+    request(`/testbench/leak/${node_id}`, { method: 'DELETE' }),
+  clearAllLeaks: () => request('/testbench/leaks/clear', { method: 'POST' }),
+  setOverride: (sensor, value) =>
+    request('/testbench/override', {
+      method: 'POST',
+      body: JSON.stringify({ sensor, value }),
+    }),
+  clearOverride: (sensor) =>
+    request(`/testbench/override/${sensor}`, { method: 'DELETE' }),
+  clearAllOverrides: () =>
+    request('/testbench/overrides/clear', { method: 'POST' }),
+  setEndpoint: (endpoint_id, production_pct, state) =>
+    request('/testbench/endpoint', {
+      method: 'POST',
+      body: JSON.stringify({ endpoint_id, production_pct, state }),
+    }),
 };

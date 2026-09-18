@@ -12,6 +12,16 @@ from app.dependencies import engine
 router = APIRouter(prefix="/simulation", tags=["simulation"])
 
 
+@router.get("/status")
+def simulation_status():
+    """Report whether the auto-tick loop is currently paused.
+
+    The UI needs this to show a truthful run/pause state after a page reload,
+    when it has no memory of which button was last pressed.
+    """
+    return {"paused": engine.is_paused}
+
+
 @router.post("/step")
 def simulation_step():
     """Advance exactly one tick and return the resulting state."""

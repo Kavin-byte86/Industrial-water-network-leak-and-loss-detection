@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections import deque
 
 from app.core.config import HISTORY_BUFFER_SIZE
+from app.leak_extension_point import LeakRegistry
 from app.network.topology import MACHINES, TAPS
 
 
@@ -25,6 +26,12 @@ class SessionStore:
         self.taps: dict[str, dict] = {}
         self.history: deque[dict] = deque(maxlen=HISTORY_BUFFER_SIZE)
         self._latest: dict | None = None
+        # Injected leaks and manual sensor overrides, both driven by the test
+        # bench UI. Overrides map a sensor key ("flow_J3", "pressure_J3") to a
+        # forced reading, letting an operator fake a sensor without changing the
+        # underlying simulation.
+        self.leaks = LeakRegistry()
+        self.overrides: dict[str, float] = {}
         self.reset()
 
     # ── reset to initial conditions ───────────────────────────────────────
@@ -38,6 +45,8 @@ class SessionStore:
             mid: {"production_pct": 0.0, "state": "OFF"} for mid in MACHINES
         }
         self.taps = {tid: {"state": "CLOSED"} for tid in TAPS}
+        self.leaks.clear_all()
+        self.overrides.clear()
         self.history.clear()
         self._latest = None
 
@@ -78,3 +87,15 @@ class SessionStore:
         t = self.taps[tap_id]
         t["state"] = state
         return t
+
+    # ── sensor overrides ──────────────────────────────────────────────────
+
+    def set_override(self, sensor: str, value: float) -> None:
+        """Force a sensor reading (e.g. "flow_J3") to a fixed value."""
+        self.overrides[sensor] = float(value)
+
+    def clear_override(self, sensor: str) -> None:
+        self.overrides.pop(sensor, None)
+
+    def clear_overrides(self) -> None:
+        self.overrides.clear()

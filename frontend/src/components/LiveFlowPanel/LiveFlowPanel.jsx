@@ -22,7 +22,7 @@ function Sparkline({ values, width = 60, height = 16 }) {
 
   return (
     <svg className="sparkline" width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <polyline points={points} fill="none" stroke="#4299e1" strokeWidth="1.2" />
+      <polyline points={points} fill="none" stroke="var(--series-1)" strokeWidth="1.2" />
     </svg>
   );
 }
@@ -32,7 +32,7 @@ function StateBadge({ state }) {
   return <span className={`badge badge-${cls}`}>{state || 'OFF'}</span>;
 }
 
-export function LiveFlowPanel({ state, buffer }) {
+export function LiveFlowPanel({ state, buffer = [] }) {
   const flows = state?.flows || {};
   const pressures = state?.pressures || {};
   const machines = state?.machines || {};
@@ -46,7 +46,7 @@ export function LiveFlowPanel({ state, buffer }) {
     <div>
       <div className="view-header">
         <h2 className="view-title">Live Flow Data</h2>
-        <span style={{ fontSize: '0.75rem', color: '#718096' }}>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
           {buffer.length} ticks buffered • Updates every poll interval
         </span>
       </div>

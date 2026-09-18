@@ -6,7 +6,7 @@
  * Click a machine/tap to open inline control panel.
  */
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { api } from '../../api/client';
 
 // Spatial layout — machines grouped by process zone
@@ -43,48 +43,103 @@ const SUPPLY_POINTS = [
 
 const MACHINE_STATES = ['OFF', 'STARTING', 'RUNNING', 'STOPPING', 'MAINTENANCE'];
 
-export function FacilityMap({ state }) {
+const PANEL = { width: 200, height: 190, margin: 8 };
+
+export function FacilityMap({ state, onError, leakNodes = [] }) {
   const [selected, setSelected] = useState(null);
   const [controlState, setControlState] = useState({ pct: 100, state: 'RUNNING' });
+  const [panelPos, setPanelPos] = useState({ left: 0, top: 0 });
+  const [busy, setBusy] = useState(false);
+  const containerRef = useRef(null);
+  const svgRef = useRef(null);
+  const leaking = new Set(leakNodes);
   const flows = state?.flows || {};
   const machines = state?.machines || {};
   const taps = state?.taps || {};
 
-  const handleApplyMachine = async (mid) => {
-    await api.controlMachine(mid, controlState.pct, controlState.state);
-    setSelected(null);
-  };
+  /**
+   * Convert a point in SVG viewBox units to pixel coordinates inside the
+   * container.
+   *
+   * The panel is absolutely positioned HTML, but LAYOUT holds viewBox units
+   * (0-700 x 0-460). The SVG is scaled to fill the container and letterboxed by
+   * preserveAspectRatio, so viewBox units are NOT pixels — using them directly
+   * placed the panel away from the node that was clicked. getScreenCTM gives
+   * the live transform, which stays correct at any window size.
+   */
+  const placePanel = useCallback((pos) => {
+    const svg = svgRef.current;
+    const container = containerRef.current;
+    if (!svg || !container || !svg.getScreenCTM) return;
 
-  const handleApplyTap = async (tid, newState) => {
-    await api.controlTap(tid, newState);
-    setSelected(null);
-  };
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+
+    const pt = svg.createSVGPoint();
+    pt.x = pos.x;
+    pt.y = pos.y;
+    const screen = pt.matrixTransform(ctm);
+    const rect = container.getBoundingClientRect();
+
+    // Offset slightly down-right of the node, then clamp so the panel can never
+    // hang outside the visible map.
+    const maxLeft = rect.width - PANEL.width - PANEL.margin;
+    const maxTop = rect.height - PANEL.height - PANEL.margin;
+    const left = screen.x - rect.left + 20;
+    const top = screen.y - rect.top + 20;
+
+    setPanelPos({
+      left: Math.max(PANEL.margin, Math.min(left, Math.max(PANEL.margin, maxLeft))),
+      top: Math.max(PANEL.margin, Math.min(top, Math.max(PANEL.margin, maxTop))),
+    });
+  }, []);
+
+  // Control writes used to be un-caught: a rejected request left the panel open
+  // with no explanation.
+  const runControl = useCallback(async (action) => {
+    setBusy(true);
+    try {
+      await action();
+      onError?.(null);
+      setSelected(null);
+    } catch (err) {
+      onError?.(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }, [onError]);
+
+  const handleApplyMachine = (mid) =>
+    runControl(() => api.controlMachine(mid, controlState.pct, controlState.state));
+
+  const handleApplyTap = (tid, newState) =>
+    runControl(() => api.controlTap(tid, newState));
 
   return (
     <div>
       <div className="view-header">
         <h2 className="view-title">Facility Map</h2>
       </div>
-      <div className="facility-map" style={{ position: 'relative' }}>
-        <svg viewBox="0 0 700 460" preserveAspectRatio="xMidYMid meet"
-          style={{ width: '100%', height: 'calc(100vh - 100px)', background: '#fff', border: '1px solid var(--gray-300)', borderRadius: '8px' }}>
+      <div className="facility-map" ref={containerRef} style={{ position: 'relative' }}>
+        <svg ref={svgRef} viewBox="0 0 700 460" preserveAspectRatio="xMidYMid meet"
+          style={{ width: '100%', height: 'calc(100vh - 100px)', background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '10px' }}>
 
           {/* Background zones */}
-          <rect x="60" y="60" width="370" height="90" rx="6" fill="#ebf8ff" stroke="#bee3f8" strokeDasharray="4" />
-          <text x="245" y="78" textAnchor="middle" fontSize="8" fill="#4299e1" fontWeight="600">PRE-TREATMENT</text>
+          <rect x="60" y="60" width="370" height="90" rx="6" fill="rgba(34,211,238,0.05)" stroke="#27405e" strokeDasharray="4" />
+          <text x="245" y="78" textAnchor="middle" fontSize="8" fill="var(--text-muted)" fontWeight="700">PRE-TREATMENT</text>
 
-          <rect x="60" y="190" width="430" height="90" rx="6" fill="#ebf8ff" stroke="#bee3f8" strokeDasharray="4" />
-          <text x="275" y="208" textAnchor="middle" fontSize="8" fill="#4299e1" fontWeight="600">DYEING & WASHING</text>
+          <rect x="60" y="190" width="430" height="90" rx="6" fill="rgba(34,211,238,0.05)" stroke="#27405e" strokeDasharray="4" />
+          <text x="275" y="208" textAnchor="middle" fontSize="8" fill="var(--text-muted)" fontWeight="700">DYEING & WASHING</text>
 
-          <rect x="60" y="320" width="430" height="90" rx="6" fill="#ebf8ff" stroke="#bee3f8" strokeDasharray="4" />
-          <text x="275" y="338" textAnchor="middle" fontSize="8" fill="#4299e1" fontWeight="600">FINISHING & UTILITY</text>
+          <rect x="60" y="320" width="430" height="90" rx="6" fill="rgba(34,211,238,0.05)" stroke="#27405e" strokeDasharray="4" />
+          <text x="275" y="338" textAnchor="middle" fontSize="8" fill="var(--text-muted)" fontWeight="700">FINISHING & UTILITY</text>
 
-          <rect x="540" y="90" width="120" height="340" rx="6" fill="#f0fff4" stroke="#c6f6d5" strokeDasharray="4" />
-          <text x="600" y="108" textAnchor="middle" fontSize="8" fill="#48bb78" fontWeight="600">TAPS</text>
+          <rect x="540" y="90" width="120" height="340" rx="6" fill="rgba(34,197,94,0.05)" stroke="#2c4a3d" strokeDasharray="4" />
+          <text x="600" y="108" textAnchor="middle" fontSize="8" fill="var(--text-muted)" fontWeight="700">TAPS</text>
 
           {/* ═══ PIPE NETWORK ═══ */}
           {/* Main supply line from inlet */}
-          <text x="350" y="22" textAnchor="middle" fontSize="9" fontWeight="700" fill="#2b6cb0">
+          <text x="350" y="22" textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--accent)">
             MAIN INLET (J1): {(flows['J1'] || 0).toFixed(0)} L/min
           </text>
           <line x1="350" y1="30" x2="350" y2="55" className="pipe-flow" style={{ animationDuration: '0.8s' }} />
@@ -164,14 +219,19 @@ export function FacilityMap({ state }) {
             return (
               <g key={id} style={{ cursor: 'pointer' }} onClick={() => {
                 setSelected(id);
-                setControlState({ pct: m.production_pct || 100, state: m.state || 'OFF' });
+                setControlState({ pct: m.production_pct ?? 100, state: m.state || 'OFF' });
+                placePanel(pos);
               }}>
                 <rect x={pos.x - 28} y={pos.y - 18} width={56} height={36} rx={4}
-                  className={`node-machine ${isRunning ? 'running' : ''}`} />
-                <text x={pos.x} y={pos.y - 4} textAnchor="middle" fontSize="8" fontWeight="700" fill="#2d3748">{id}</text>
-                <text x={pos.x} y={pos.y + 8} textAnchor="middle" fontSize="7" fill="#718096">{pos.label}</text>
+                  className={`node-machine ${isRunning ? 'running' : ''} ${leaking.has(JUNCTION_MAP[id]) ? 'node-leaking' : ''}`} />
+                {leaking.has(JUNCTION_MAP[id]) && (
+                  <rect x={pos.x - 34} y={pos.y - 24} width={68} height={48} rx={6}
+                    className="leak-halo" />
+                )}
+                <text x={pos.x} y={pos.y - 4} textAnchor="middle" fontSize="8" fontWeight="700" fill="var(--text-primary)">{id}</text>
+                <text x={pos.x} y={pos.y + 8} textAnchor="middle" fontSize="7" fill="var(--text-muted)">{pos.label}</text>
                 <text x={pos.x} y={pos.y + 26} textAnchor="middle" fontSize="7" fontWeight="600"
-                  fill={isRunning ? '#2b6cb0' : '#a0aec0'}>
+                  fill={isRunning ? 'var(--accent)' : 'var(--text-muted)'}>
                   {m.flow_lpm?.toFixed(0) || 0} L/m
                 </text>
               </g>
@@ -184,11 +244,12 @@ export function FacilityMap({ state }) {
             const isOpen = t.state === 'OPEN';
             const points = `${pos.x},${pos.y - 14} ${pos.x - 16},${pos.y + 12} ${pos.x + 16},${pos.y + 12}`;
             return (
-              <g key={id} style={{ cursor: 'pointer' }} onClick={() => setSelected(id)}>
-                <polygon points={points} className={`node-tap ${isOpen ? 'open' : ''}`} />
-                <text x={pos.x} y={pos.y + 4} textAnchor="middle" fontSize="8" fontWeight="700" fill="#2d3748">{id}</text>
+              <g key={id} style={{ cursor: 'pointer' }} onClick={() => { setSelected(id); placePanel(pos); }}>
+                <polygon points={points}
+                  className={`node-tap ${isOpen ? 'open' : ''} ${leaking.has(JUNCTION_MAP[id]) ? 'node-leaking' : ''}`} />
+                <text x={pos.x} y={pos.y + 4} textAnchor="middle" fontSize="8" fontWeight="700" fill="var(--text-primary)">{id}</text>
                 <text x={pos.x} y={pos.y + 28} textAnchor="middle" fontSize="7" fontWeight="600"
-                  fill={isOpen ? '#2b6cb0' : '#a0aec0'}>
+                  fill={isOpen ? 'var(--accent)' : 'var(--text-muted)'}>
                   {t.flow_lpm?.toFixed(0) || 0} L/m
                 </text>
               </g>
@@ -199,8 +260,7 @@ export function FacilityMap({ state }) {
         {/* Inline control panel */}
         {selected && selected.startsWith('M') && (
           <div className="inline-control" style={{
-            top: LAYOUT[selected].y + 60, left: LAYOUT[selected].x + 30,
-            position: 'absolute',
+            top: panelPos.top, left: panelPos.left, position: 'absolute',
           }}>
             <label>{selected} — Control</label>
             <label style={{ marginTop: 8 }}>Production: {controlState.pct}%</label>
@@ -211,24 +271,25 @@ export function FacilityMap({ state }) {
               onChange={e => setControlState(s => ({ ...s, state: e.target.value }))}>
               {MACHINE_STATES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button className="apply-btn" onClick={() => handleApplyMachine(selected)}>Apply</button>
-            <button className="apply-btn" style={{ marginTop: 4, background: '#a0aec0' }}
+            <button className="apply-btn" disabled={busy}
+              onClick={() => handleApplyMachine(selected)}>{busy ? 'Applying…' : 'Apply'}</button>
+            <button className="apply-btn" style={{ marginTop: 4, background: 'var(--bg-inset)', color: 'var(--text-secondary)' }}
               onClick={() => setSelected(null)}>Cancel</button>
           </div>
         )}
 
         {selected && selected.startsWith('T') && (
           <div className="inline-control" style={{
-            top: LAYOUT[selected].y + 60, left: LAYOUT[selected].x + 30,
-            position: 'absolute',
+            top: panelPos.top, left: panelPos.left, position: 'absolute',
           }}>
             <label>{selected} — Control</label>
             <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-              <button className="apply-btn" onClick={() => handleApplyTap(selected, 'OPEN')}>Open</button>
-              <button className="apply-btn" style={{ background: '#a0aec0' }}
+              <button className="apply-btn" disabled={busy}
+                onClick={() => handleApplyTap(selected, 'OPEN')}>Open</button>
+              <button className="apply-btn" style={{ background: 'var(--bg-inset)', color: 'var(--text-secondary)' }} disabled={busy}
                 onClick={() => handleApplyTap(selected, 'CLOSED')}>Close</button>
             </div>
-            <button className="apply-btn" style={{ marginTop: 4, background: '#e2e8f0', color: '#4a5568' }}
+            <button className="apply-btn" style={{ marginTop: 4, background: 'var(--bg-inset)', color: 'var(--text-secondary)' }}
               onClick={() => setSelected(null)}>Cancel</button>
           </div>
         )}

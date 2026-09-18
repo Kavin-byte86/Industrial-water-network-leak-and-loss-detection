@@ -68,3 +68,26 @@ PRESSURE_K: float = float(os.getenv("PRESSURE_K", "0.002"))
 # History ring-buffer size
 # ---------------------------------------------------------------------------
 HISTORY_BUFFER_SIZE: int = int(os.getenv("HISTORY_BUFFER_SIZE", "1000"))
+
+# ---------------------------------------------------------------------------
+# Water tariff — used to convert a loss rate into financial impact.
+# Default is a mid-range Indian industrial water tariff; override per site.
+# ---------------------------------------------------------------------------
+WATER_COST_PER_M3: float = float(os.getenv("WATER_COST_PER_M3", "45.0"))
+CURRENCY: str = os.getenv("CURRENCY", "INR")
+CURRENCY_SYMBOL: str = os.getenv("CURRENCY_SYMBOL", "\u20b9")
+
+# Effluent handling often costs more than the intake itself: leaked process
+# water is usually charged twice (supply + treatment). Set to 0 to count
+# supply only.
+EFFLUENT_COST_PER_M3: float = float(os.getenv("EFFLUENT_COST_PER_M3", "25.0"))
+
+# ---------------------------------------------------------------------------
+# Historical baseline — how many recent ticks define "normal" for a sensor.
+# 72 ticks x 5 min = 6 hours, long enough to span a shift's usage pattern.
+# ---------------------------------------------------------------------------
+BASELINE_WINDOW_TICKS: int = int(os.getenv("BASELINE_WINDOW_TICKS", "72"))
+BASELINE_MIN_TICKS: int = int(os.getenv("BASELINE_MIN_TICKS", "12"))
+# How many standard deviations above its own baseline a junction must sit
+# before its consumption counts as abnormal.
+BASELINE_SIGMAS: float = float(os.getenv("BASELINE_SIGMAS", "3.0"))
