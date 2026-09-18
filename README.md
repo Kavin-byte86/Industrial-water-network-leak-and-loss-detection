@@ -186,3 +186,101 @@ The system includes automated demonstrations validating production-aware behavio
 | **Case 4** | Constant Production | Localized branch imbalance ($\Delta Q$) | `leak = 1` | Topological mass-balance violation |
 
 All **16 Automated Validation Checks** pass with $0$ errors.
+
+---
+
+## 9. Machine Learning Pipeline
+
+The detector is a 4-stage pipeline in [`classifier/`](classifier/):
+
+| Stage | Model | Purpose |
+|---|---|---|
+| 1 | 16 x Ridge (degree-2 polynomial) | Expected flow per sensor from production rates and machine/tap states. Fit on **normal (`leak == 0`) rows only**. |
+| 2 | XGBoost binary classifier | Leak / no-leak, from Stage-1 residuals plus mass balances, pressures and rolling statistics. |
+| 3 | XGBoost multiclass | Which of the 16 zones ruptured. |
+| 4 | XGBoost regressor | Leak rate in L/min. |
+
+Stage 1 never sees a leak during training, which is what keeps its residuals
+meaningful when one occurs. Splits are strictly chronological (70/15/15) and the
+target columns are excluded from every feature set.
+
+### Training
+
+```bash
+# v1 baseline: all four stages
+python classifier/training/train_all.py
+
+# v2: adds temporal lag / deviation features, tunes scale_pos_weight and
+# the decision threshold, and writes the reports under classifier/reports/
+python classifier/training/optimize_pipeline.py
+```
+
+`classifier/features.py` holds the v2 feature block and is imported by **both**
+training and inference, so the two cannot drift apart.
+
+### Inference
+
+```python
+from classifier.predict import WaterNetworkLeakDetector
+
+detector = WaterNetworkLeakDetector(models_dir="classifier/models/v2")
+
+detector.predict(state_dict)        # one network state
+detector.predict_batch(dataframe)   # a window of telemetry, vectorised
+```
+
+Prefer `predict_batch` wherever possible: it is roughly 75x faster per row (~3 ms
+vs ~240 ms) because each stage runs once for the whole batch. It is also the more
+accurate call when using v2, whose lag features need surrounding rows to exist.
+
+Replay the dataset as a simulated SCADA feed with:
+
+```bash
+python classifier/predict_stream.py --start 100000 --steps 100
+```
+
+### Benchmark dashboard
+
+```bash
+pip install -r requirements.txt
+streamlit run benchmark_app.py
+```
+
+Four tabs: methodology, live test-set accuracy (scored on load, not hardcoded),
+the LeakDB external benchmark, and an interactive leak-injection simulator.
+
+---
+
+## 10. External Validation (LeakDB)
+
+The synthetic benchmark partly measures self-consistency, so the methodology is
+also validated against the public **LeakDB** municipal benchmark (Hanoi CMH). The
+benchmark data is large and third-party, so it is not committed - fetch it first:
+
+```bash
+git clone https://github.com/KIOS-Research/LeakDB.git external_validation/LeakDB
+python external_validation/run_leakdb_test.py
+```
+
+This regenerates [`external_validation/leakdb_report.md`](external_validation/leakdb_report.md)
+entirely from the result CSVs, so the report cannot drift from the artifacts it
+describes.
+
+**Caveat worth stating plainly:** LeakDB is a municipal network with no production
+schedule. A good result there validates the *hydraulic residual methodology*, not
+the production-aware textile pipeline as a whole.
+
+---
+
+## 11. Known Limitations
+
+- **Small leaks are undetectable by construction.** At 2% flow noise on a
+  ~1000 L/min main, the noise floor is ~20 L/min. Leaks below roughly 30 L/min
+  (SNR > 1.5) are buried in it; most missed leaks in the test split are in this
+  band. See [`classifier/reports/DETECTABILITY_ANALYSIS.md`](classifier/reports/DETECTABILITY_ANALYSIS.md).
+- **`backend/` and `frontend/` are scaffolding only.** All working code lives at
+  the repository root, in `classifier/` and in `external_validation/`; the
+  Streamlit dashboard is the current front end.
+- **Reports state their scope.** Threshold-sweep numbers are validation-set and
+  optimistic by construction; the test-set table in
+  `MODEL_OPTIMIZATION_REPORT.md` is the honest estimate.

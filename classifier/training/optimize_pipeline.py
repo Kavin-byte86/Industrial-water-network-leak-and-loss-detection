@@ -1,7 +1,9 @@
 import os
 import sys
+import json
 import pickle
 import time
+from datetime import datetime
 import numpy as np
 import pandas as pd
 from collections import Counter
@@ -18,6 +20,8 @@ warnings.filterwarnings('ignore')
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import config
 from predict import WaterNetworkLeakDetector
+# Single source of truth for the v2 feature block, shared with inference.
+from features import add_advanced_features
 
 MODELS_V1_DIR = os.path.join(os.path.dirname(__file__), '..', 'models', 'v1')
 MODELS_V2_DIR = os.path.join(os.path.dirname(__file__), '..', 'models', 'v2')
@@ -35,35 +39,6 @@ def load_data():
     val_df = df.iloc[n_train:n_train+n_val].copy()
     test_df = df.iloc[n_train+n_val:].copy()
     return df, train_df, val_df, test_df
-
-def add_advanced_features(df):
-    df_out = df.copy()
-    # 1. Temporal Lags (1=5min, 3=15min, 6=30min)
-    for i in range(1, 17):
-        s_id = f"J{i}"
-        df_out[f'flow_{s_id}_lag1'] = df_out[f'flow_{s_id}'].shift(1)
-        df_out[f'flow_{s_id}_lag3'] = df_out[f'flow_{s_id}'].shift(3)
-        df_out[f'flow_{s_id}_lag6'] = df_out[f'flow_{s_id}'].shift(6)
-        
-        # Rolling Median and short term deviation (using existing rolling_mean if available, or recalc)
-        window = 12
-        df_out[f'rolling_median_flow_{s_id}'] = df_out[f'flow_{s_id}'].rolling(window=window, min_periods=1).median()
-        # Short term dev: current flow - rolling median
-        df_out[f'short_term_dev_flow_{s_id}'] = df_out[f'flow_{s_id}'] - df_out[f'rolling_median_flow_{s_id}']
-        
-    # Total production feature
-    total_prod = df_out[[f"production_M{i}" for i in range(1, 9)]].sum(axis=1) + 1.0 # avoid div by zero
-    
-    # 2. Production relative features (flow per production)
-    for i in range(1, 17):
-        s_id = f"J{i}"
-        df_out[f'flow_per_prod_{s_id}'] = df_out[f'flow_{s_id}'] / total_prod
-        if f'ml_flow_residual_{s_id}' in df_out.columns:
-            df_out[f'residual_per_prod_{s_id}'] = df_out[f'ml_flow_residual_{s_id}'] / total_prod
-            
-    # Bfill to handle NaNs from lags
-    df_out = df_out.bfill()
-    return df_out
 
 def verify_data_leakage(features, train_start, test_end):
     print("\n=====================================================================")
@@ -89,6 +64,7 @@ def analyze_detectability(df):
     absolute_noise_j1 = nom_flow_j1 * noise_percent
     
     content = f"""# Sensor Noise & Detectability Analysis
+_Derived from `config.py`; generated {datetime.now():%Y-%m-%d %H:%M}._
 
 ## Noise Floor Profile
 - Configured Flow Noise: {config.FLOW_NOISE_PERCENT}%
@@ -109,8 +85,18 @@ def tune_threshold(model, X_val, y_val):
     probs = model.predict_proba(X_val)[:, 1]
     thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     results = []
-    
-    content = "# Decision Threshold Tuning (Validation Set)\n\n"
+
+    # Reports from this pipeline are scoped explicitly: the threshold sweep is a
+    # v2 VALIDATION-set sweep, while MODEL_OPTIMIZATION_REPORT compares v1 vs v2
+    # on the untouched TEST set. Without these labels the two files read as if
+    # they contradict each other.
+    content = "# Decision Threshold Tuning\n\n"
+    content += f"- **Model**: v2 Stage-2 leak classifier\n"
+    content += f"- **Split**: validation ({len(y_val):,} rows, {int(y_val.sum()):,} leak)\n"
+    content += f"- **Generated**: {datetime.now():%Y-%m-%d %H:%M}\n\n"
+    content += "> These are validation-set numbers used only to pick the operating\n"
+    content += "> threshold. Headline performance is the test-set figure in\n"
+    content += "> `MODEL_OPTIMIZATION_REPORT.md`.\n\n"
     content += "| Threshold | Precision | Recall | F1 | False Positives | False Negatives |\n"
     content += "|-----------|-----------|--------|----|-----------------|-----------------|\n"
     
@@ -261,7 +247,11 @@ def optimize_model():
     fn_df = test_df[fn_mask]
     fn_df.to_csv(os.path.join(REPORTS_DIR, 'false_negative_analysis.csv'), index=False)
     with open(os.path.join(REPORTS_DIR, 'FALSE_NEGATIVE_ANALYSIS.md'), 'w') as f:
-        f.write("# False Negative Analysis (v2)\n")
+        f.write("# False Negative Analysis\n\n")
+        f.write("- **Model**: v2 Stage-2 leak classifier\n")
+        f.write(f"- **Split**: test ({len(test_df):,} rows)\n")
+        f.write(f"- **Decision threshold**: {best_thresh:.2f}\n")
+        f.write(f"- **Generated**: {datetime.now():%Y-%m-%d %H:%M}\n\n")
         f.write(f"Total Missed Leaks: {len(fn_df)}\n\n")
         if len(fn_df) > 0:
             f.write("### Breakdown by Zone\n```\n")
@@ -271,12 +261,47 @@ def optimize_model():
             f.write("\n```\n")
             
     # Final Report
+    pr_v1 = precision_score(y_test, preds_v1, zero_division=0)
+    pr_v2 = precision_score(y_test, preds_v2, zero_division=0)
+
     with open(os.path.join(REPORTS_DIR, 'MODEL_OPTIMIZATION_REPORT.md'), 'w') as f:
-        f.write("# Model Optimization Report\n")
-        f.write("## Improvements\n- Added advanced temporal lags and short-term deviations.\n")
-        f.write("- Tuned XGBoost `scale_pos_weight` and threshold.\n")
-        f.write("## Metrics (Test Set)\n")
-        f.write(f"Recall increased from {rc_v1:.2%} to {rc_v2:.2%}.\n")
-        
+        f.write("# Model Optimization Report (v1 -> v2)\n\n")
+        f.write(f"- **Split**: untouched test set ({len(test_df):,} rows, "
+                f"{int(y_test.sum()):,} leak)\n")
+        f.write(f"- **v2 decision threshold**: {best_thresh:.2f} "
+                f"(tuned on validation, see `THRESHOLD_ANALYSIS.md`)\n")
+        f.write("- **v1 decision threshold**: 0.50 (default)\n")
+        f.write(f"- **Generated**: {datetime.now():%Y-%m-%d %H:%M}\n\n")
+        f.write("## Improvements\n")
+        f.write("- Added advanced temporal lags and short-term deviations.\n")
+        f.write("- Tuned XGBoost `scale_pos_weight` and decision threshold.\n\n")
+        f.write("## Test-Set Metrics\n\n")
+        f.write("| Metric | v1 | v2 |\n|---|---|---|\n")
+        f.write(f"| Precision | {pr_v1:.4f} | {pr_v2:.4f} |\n")
+        f.write(f"| Recall | {rc_v1:.4f} | {rc_v2:.4f} |\n")
+        f.write(f"| F1 | {f1_v1:.4f} | {f1_v2:.4f} |\n")
+        f.write(f"| PR-AUC | {prauc_v1:.4f} | {prauc_v2:.4f} |\n\n")
+        f.write(f"False positives (v2): {fp} | False negatives (v2): {fn}\n\n")
+        f.write("> Validation-set recall in `THRESHOLD_ANALYSIS.md` is higher than the\n")
+        f.write("> test-set recall here. That is expected: the threshold was selected on\n")
+        f.write("> validation, so those numbers are optimistic. The table above is the\n")
+        f.write("> honest estimate.\n")
+
+    # Machine-readable summary so the dashboard never has to hardcode a claim.
+    with open(os.path.join(REPORTS_DIR, 'metrics.json'), 'w') as f:
+        json.dump({
+            "generated": datetime.now().isoformat(timespec="seconds"),
+            "split": "test",
+            "test_rows": int(len(test_df)),
+            "test_leak_rows": int(y_test.sum()),
+            "v2_threshold": float(best_thresh),
+            "v1": {"precision": float(pr_v1), "recall": float(rc_v1),
+                   "f1": float(f1_v1), "pr_auc": float(prauc_v1)},
+            "v2": {"precision": float(pr_v2), "recall": float(rc_v2),
+                   "f1": float(f1_v2), "pr_auc": float(prauc_v2),
+                   "false_positives": int(fp), "false_negatives": int(fn)},
+        }, f, indent=2)
+
+
 if __name__ == "__main__":
     optimize_model()

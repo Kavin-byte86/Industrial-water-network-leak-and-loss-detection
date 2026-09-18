@@ -252,7 +252,18 @@ def run_experiment():
     df_evt = pd.DataFrame(event_results)
     print(df_evt[df_evt["Model"] == "D_NewResidualPressureBalance"].to_string(index=False))
     df_evt.to_csv(os.path.join(OUT_DIR, "scenario_events.csv"), index=False)
-    
+
+    print("--- 7. FEATURE IMPORTANCE (best model by F1) ---")
+    best_name = df_clf.loc[df_clf["F1"].idxmax(), "Model"]
+    best_clf = classifiers[best_name]
+    df_fi = pd.DataFrame({
+        "Feature": feature_sets[best_name],
+        "Importance": best_clf.feature_importances_,
+        "Model": best_name,
+    }).sort_values("Importance", ascending=False)
+    df_fi.to_csv(os.path.join(OUT_DIR, "feature_importance.csv"), index=False)
+    print(df_fi.head(10).to_string(index=False))
+
     print(f"\nExperiment complete. Results saved to {OUT_DIR}")
 
 if __name__ == "__main__":
