@@ -5,8 +5,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Any
 
-# Ensure config can be loaded
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# config.py is in the same directory (classifier/)
 import config
 
 class WaterNetworkLeakDetector:

@@ -4,8 +4,8 @@ import pickle
 import pandas as pd
 import numpy as np
 
-# Ensure config can be loaded
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+# config.py is in classifier/ (one level up from training/)
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import config
 from feature_engineering import compute_expected_machine_flow, compute_expected_tap_flow
 

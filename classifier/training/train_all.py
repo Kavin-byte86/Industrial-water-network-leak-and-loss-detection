@@ -16,8 +16,8 @@ from sklearn.metrics import (
     recall_score, f1_score, classification_report
 )
 
-# Ensure config can be loaded
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+# config.py is in classifier/ (one level up from training/)
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import config
 
 MODELS_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')

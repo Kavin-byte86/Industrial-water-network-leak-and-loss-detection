@@ -1,10 +1,21 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
 *.egg-info/
+*.egg
 dist/
+build/
 venv/
 .env
+.venv/
+*.whl
+
+# Pytest
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
 
 # Node
 node_modules/
@@ -14,10 +25,16 @@ build/
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # OS
 .DS_Store
 Thumbs.db
+
+# --- Documentation (internal use only) ---
+classifier/MODEL_TRAINING_DOCUMENTATION.md
+backend/BACKEND_IMPLEMENTATION_PLAN.md
 
 # --- Datasets and Large Files ---
 # Ignore synthetic datasets
@@ -41,3 +58,4 @@ external_validation/models/
 *.txt
 !requirements.txt
 !README.txt
+

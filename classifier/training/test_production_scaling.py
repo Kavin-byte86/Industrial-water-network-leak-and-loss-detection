@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Ensure config can be loaded
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+# config.py is in classifier/ (one level up from training/)
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import config
 
 MODELS_DIR = os.path.join(os.path.dirname(__file__), '..', 'models')
@@ -49,7 +49,7 @@ def run_scaling_test():
             row[f"tap_status_T{i}"] = "CLOSED"
             
         # We need actual flows. We will use the explicit physics model to calculate them perfectly.
-        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
         from feature_engineering import compute_expected_machine_flow, compute_expected_tap_flow
         
         expected_flows = {}

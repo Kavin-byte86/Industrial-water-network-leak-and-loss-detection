@@ -4,10 +4,9 @@ import time
 import pandas as pd
 from datetime import datetime
 
-# Ensure config can be loaded
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# config.py is in the same directory (classifier/)
 import config
-from classifier.predict import WaterNetworkLeakDetector
+from predict import WaterNetworkLeakDetector
 
 def stream_simulation(start_idx: int = 80000, num_steps: int = 100, delay_sec: float = 0.5):
     """

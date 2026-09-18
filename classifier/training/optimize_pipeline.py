@@ -14,10 +14,10 @@ from xgboost import XGBClassifier
 import warnings
 warnings.filterwarnings('ignore')
 
-# Ensure config can be loaded
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+# config.py is in classifier/ (one level up from training/)
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import config
-from classifier.predict import WaterNetworkLeakDetector
+from predict import WaterNetworkLeakDetector
 
 MODELS_V1_DIR = os.path.join(os.path.dirname(__file__), '..', 'models', 'v1')
 MODELS_V2_DIR = os.path.join(os.path.dirname(__file__), '..', 'models', 'v2')
