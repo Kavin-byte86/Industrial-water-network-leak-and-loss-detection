@@ -4,13 +4,19 @@ GET /datasink/export?since_ticks=N — §7.2
 
 Flat-row views over the session store history, matching the ML training
 dataset column naming as closely as possible.
+
+/datasink/export reads from Postgres so historical data survives restarts.
 """
+
+import logging
 
 from fastapi import APIRouter, Query
 
 from app.dependencies import store
 
 router = APIRouter(prefix="/datasink", tags=["datasink"])
+
+logger = logging.getLogger(__name__)
 
 
 def _flatten_snapshot(snap: dict) -> dict:
@@ -72,8 +78,31 @@ def datasink_latest():
 
 
 @router.get("/export")
-def datasink_export(since_ticks: int = Query(100, ge=1, le=1000)):
-    """Return the last N ticks as flat rows for batch classifier consumption."""
-    snapshots = store.get_history(since_ticks)
-    rows = [_flatten_snapshot(s) for s in snapshots]
-    return {"rows": rows, "count": len(rows)}
+def datasink_export(since_ticks: int = Query(100, ge=1, le=10000)):
+    """Return the last N ticks as flat rows.
+
+    Reads from Postgres (survives restarts) with an in-memory fallback
+    if the DB is unavailable.
+    """
+    try:
+        from app.db.database import get_session
+        from app.db.models import TickRecord
+
+        session = get_session()
+        try:
+            records = (
+                session.query(TickRecord)
+                .order_by(TickRecord.id.desc())
+                .limit(since_ticks)
+                .all()
+            )
+            rows = [r.to_flat_dict() for r in reversed(records)]
+            return {"rows": rows, "count": len(rows), "source": "postgres"}
+        finally:
+            session.close()
+    except Exception as exc:
+        logger.warning("DB read failed, falling back to in-memory: %s", exc)
+        snapshots = store.get_history(since_ticks)
+        rows = [_flatten_snapshot(s) for s in snapshots]
+        return {"rows": rows, "count": len(rows), "source": "memory"}
+

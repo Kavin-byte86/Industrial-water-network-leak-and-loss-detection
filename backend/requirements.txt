@@ -20,3 +20,7 @@ xgboost>=2.0,<3.0
 # Test suite (backend/tests)
 pytest>=8.0.0
 httpx>=0.26.0
+
+# PostgreSQL persistence (Neon serverless Postgres)
+sqlalchemy>=2.0,<3.0
+psycopg2-binary>=2.9

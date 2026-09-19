@@ -26,6 +26,9 @@ from app.dependencies import engine
 # ── Lifespan (startup / shutdown) ─────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Create DB tables (CREATE TABLE IF NOT EXISTS)
+    from app.db.database import create_tables
+    create_tables()
     # Start background tick loop
     await engine.start_background_loop()
     yield

@@ -91,3 +91,10 @@ BASELINE_MIN_TICKS: int = int(os.getenv("BASELINE_MIN_TICKS", "12"))
 # How many standard deviations above its own baseline a junction must sit
 # before its consumption counts as abnormal.
 BASELINE_SIGMAS: float = float(os.getenv("BASELINE_SIGMAS", "3.0"))
+
+# ---------------------------------------------------------------------------
+# PostgreSQL persistence (Neon serverless Postgres)
+# Set DATABASE_URL in your environment (Render dashboard / shell export).
+# The backend will refuse to start if this is unset.
+# ---------------------------------------------------------------------------
+DATABASE_URL: str = os.getenv("DATABASE_URL", "")
