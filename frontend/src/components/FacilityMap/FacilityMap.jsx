@@ -8,6 +8,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { api } from '../../api/client';
+import { isFlowing, pipeClass } from '../../lib/flowState';
 
 // Spatial layout — machines grouped by process zone
 const LAYOUT = {
@@ -142,73 +143,75 @@ export function FacilityMap({ state, onError, leakNodes = [] }) {
           <text x="350" y="22" textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--accent)">
             MAIN INLET (J1): {(flows['J1'] || 0).toFixed(0)} L/min
           </text>
-          <line x1="350" y1="30" x2="350" y2="55" className="pipe-flow" style={{ animationDuration: '0.8s' }} />
+          <line x1="350" y1="30" x2="350" y2="55"
+            className={pipeClass(flows['J1'])}
+            style={isFlowing(flows['J1']) ? { animationDuration: '0.8s' } : {}} />
 
           {/* Main horizontal trunk line */}
           <line x1="70" y1="55" x2="620" y2="55"
-            className={flows['J1'] > 0 ? 'pipe-flow' : 'pipe-idle'}
-            style={flows['J1'] > 0 ? { animationDuration: '0.6s', strokeWidth: 3 } : { strokeWidth: 2 }} />
+            className={isFlowing(flows['J1']) ? 'pipe-flow' : 'pipe-idle'}
+            style={isFlowing(flows['J1']) ? { animationDuration: '0.6s', strokeWidth: 3 } : { strokeWidth: 2 }} />
 
           {/* Branch to taps zone */}
           <line x1="580" y1="55" x2="580" y2="410"
-            className={flows['J7'] > 0 ? 'pipe-flow' : 'pipe-idle'}
-            style={flows['J7'] > 0 ? { animationDuration: '0.7s' } : {}} />
+            className={isFlowing(flows['J7']) ? 'pipe-flow' : 'pipe-idle'}
+            style={isFlowing(flows['J7']) ? { animationDuration: '0.7s' } : {}} />
 
           {/* Zone A header: Pre-treatment (M1, M2) */}
           <line x1="80" y1="55" x2="80" y2="80"
-            className={flows['J2'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J2']) ? 'pipe-flow' : 'pipe-idle'} />
           <line x1="80" y1="80" x2="280" y2="80"
-            className={flows['J2'] > 0 ? 'pipe-flow' : 'pipe-idle'}
-            style={flows['J2'] > 0 ? { animationDuration: '0.8s' } : {}} />
+            className={isFlowing(flows['J2']) ? 'pipe-flow' : 'pipe-idle'}
+            style={isFlowing(flows['J2']) ? { animationDuration: '0.8s' } : {}} />
           {/* Drop to M1 */}
           <line x1="100" y1="80" x2="100" y2={100 - 20}
-            className={flows['J5'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J5']) ? 'pipe-flow' : 'pipe-idle'} />
           {/* Drop to M2 */}
           <line x1="260" y1="80" x2="260" y2={100 - 20}
-            className={flows['J6'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J6']) ? 'pipe-flow' : 'pipe-idle'} />
 
           {/* Zone B header: Dyeing & Washing (M3, M4, M5) */}
           <line x1="80" y1="55" x2="80" y2="210"
-            className={flows['J3'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J3']) ? 'pipe-flow' : 'pipe-idle'} />
           <line x1="80" y1="210" x2="440" y2="210"
-            className={flows['J3'] > 0 ? 'pipe-flow' : 'pipe-idle'}
-            style={flows['J3'] > 0 ? { animationDuration: '0.8s' } : {}} />
+            className={isFlowing(flows['J3']) ? 'pipe-flow' : 'pipe-idle'}
+            style={isFlowing(flows['J3']) ? { animationDuration: '0.8s' } : {}} />
           {/* Drop to M3 */}
           <line x1="100" y1="210" x2="100" y2={230 - 20}
-            className={flows['J8'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J8']) ? 'pipe-flow' : 'pipe-idle'} />
           {/* Drop to M4 */}
           <line x1="260" y1="210" x2="260" y2={230 - 20}
-            className={flows['J9'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J9']) ? 'pipe-flow' : 'pipe-idle'} />
           {/* Drop to M5 */}
           <line x1="420" y1="210" x2="420" y2={230 - 20}
-            className={flows['J10'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J10']) ? 'pipe-flow' : 'pipe-idle'} />
 
           {/* Zone C header: Finishing & Utility (M6, M7, M8) */}
           <line x1="80" y1="55" x2="80" y2="340"
-            className={flows['J4'] > 0 || flows['J13'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J4']) || isFlowing(flows['J13']) ? 'pipe-flow' : 'pipe-idle'} />
           <line x1="80" y1="340" x2="440" y2="340"
-            className={flows['J4'] > 0 || flows['J13'] > 0 ? 'pipe-flow' : 'pipe-idle'}
-            style={flows['J4'] > 0 ? { animationDuration: '0.8s' } : {}} />
+            className={isFlowing(flows['J4']) || isFlowing(flows['J13']) ? 'pipe-flow' : 'pipe-idle'}
+            style={isFlowing(flows['J4']) ? { animationDuration: '0.8s' } : {}} />
           {/* Drop to M6 */}
           <line x1="100" y1="340" x2="100" y2={360 - 20}
-            className={flows['J11'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J11']) ? 'pipe-flow' : 'pipe-idle'} />
           {/* Drop to M7 */}
           <line x1="260" y1="340" x2="260" y2={360 - 20}
-            className={flows['J12'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J12']) ? 'pipe-flow' : 'pipe-idle'} />
           {/* Drop to M8 */}
           <line x1="420" y1="340" x2="420" y2={360 - 20}
-            className={flows['J13'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J13']) ? 'pipe-flow' : 'pipe-idle'} />
 
           {/* Tap branch pipes */}
           {/* T1 */}
           <line x1="580" y1="130" x2="565" y2="130"
-            className={flows['J14'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J14']) ? 'pipe-flow' : 'pipe-idle'} />
           {/* T2 */}
           <line x1="580" y1="260" x2="565" y2="260"
-            className={flows['J15'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J15']) ? 'pipe-flow' : 'pipe-idle'} />
           {/* T3 */}
           <line x1="580" y1="390" x2="565" y2="390"
-            className={flows['J16'] > 0 ? 'pipe-flow' : 'pipe-idle'} />
+            className={isFlowing(flows['J16']) ? 'pipe-flow' : 'pipe-idle'} />
 
 
           {/* Machine nodes */}

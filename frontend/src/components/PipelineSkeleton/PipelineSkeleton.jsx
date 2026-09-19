@@ -6,6 +6,8 @@
  * Animated flow dashes proportional to flow rate.
  */
 
+import { isFlowing, flowAnimation, pipeClass } from '../../lib/flowState';
+
 // ── Layout positions (hand-tuned for the exact topology) ──
 const NODES = {
   J1:  { x: 450, y: 50,  type: 'junction' },
@@ -73,13 +75,12 @@ export function PipelineSkeleton({ state, leakNodes = [] }) {
         {EDGES.map(([from, to]) => {
           const a = NODES[from], b = NODES[to];
           const flow = Math.abs(flows[to] || 0);
-          const isActive = flow > 0.5;
-          const speed = isActive ? Math.max(0.3, Math.min(2, 1 / (flow / 200))) : 0;
+          const duration = flowAnimation(flow);
           return (
             <line key={`${from}-${to}`}
               x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-              className={isActive ? 'pipe-flow' : 'pipe-idle'}
-              style={isActive ? { animationDuration: `${speed}s` } : {}}
+              className={pipeClass(flow)}
+              style={duration ? { animationDuration: duration } : {}}
             />
           );
         })}
@@ -88,13 +89,12 @@ export function PipelineSkeleton({ state, leakNodes = [] }) {
         {ENDPOINT_EDGES.map(([from, to]) => {
           const a = NODES[from], b = ENDPOINTS[to];
           const jFlow = Math.abs(flows[from] || 0);
-          const isActive = jFlow > 0.5;
-          const speed = isActive ? Math.max(0.3, Math.min(2, 1 / (jFlow / 200))) : 0;
+          const duration = flowAnimation(jFlow);
           return (
             <line key={`${from}-${to}`}
               x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-              className={isActive ? 'pipe-flow' : 'pipe-idle'}
-              style={isActive ? { animationDuration: `${speed}s` } : {}}
+              className={pipeClass(jFlow)}
+              style={duration ? { animationDuration: duration } : {}}
             />
           );
         })}
@@ -111,7 +111,7 @@ export function PipelineSkeleton({ state, leakNodes = [] }) {
               )}
               <text className="node-label" x={node.x} y={node.y + 3}>{id}</text>
               <text className="flow-label" x={node.x} y={node.y - 20}>
-                {flow > 0 ? flow.toFixed(0) : ''}
+                {isFlowing(flow) ? flow.toFixed(0) : ''}
               </text>
             </g>
           );
